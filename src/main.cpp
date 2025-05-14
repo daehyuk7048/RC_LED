@@ -20,30 +20,31 @@ const int LED_BLU = 11;    //              B
 
 /* ── 3. 펄스 측정 전역변수 ──────────────────── */
 volatile unsigned long stSwitch, stBright, stColor;
-volatile int  pwSwitch = 1500, pwBright = 1500, pwColor = 1500;
-volatile bool fSwitch  = false, fBright = false, fColor = false;
+volatile int  pwSwitch = 1500, pwBright = 1500, pwColor = 1500; // 펄스 폭 1500us 초기화
+volatile bool fSwitch  = false, fBright = false, fColor = false; // 플래그 초기화
 
 /* ── 4. ISR 세 개 ──────────────────────────── */
-void isrSwitch(){ if (digitalRead(CH_SWITCH)) stSwitch = micros();
-                  else { pwSwitch = micros() - stSwitch; fSwitch = true; } }
-
-void isrBright(){ if (digitalRead(CH_BRIGHT)) stBright = micros();
-                  else { pwBright = micros() - stBright; fBright = true; } }
-
-void isrColor (){ if (digitalRead(CH_COLOR )) stColor  = micros();
-                  else { pwColor  = micros() - stColor ; fColor  = true; } }
+void isrSwitch(){ if (digitalRead(CH_SWITCH)) stSwitch = micros();  // 신호 상승
+                  else { pwSwitch = micros() - stSwitch; fSwitch = true; } }  // 신호 하강
+// 인터럽트 서비스 루틴
+void isrBright(){ if (digitalRead(CH_BRIGHT)) stBright = micros();  // 신호 상승
+                  else { pwBright = micros() - stBright; fBright = true; } }  // 신호 하강
+// 인터럽트 서비스 루틴
+void isrColor (){ if (digitalRead(CH_COLOR )) stColor  = micros(); // 신호 상승
+                  else { pwColor  = micros() - stColor ; fColor  = true; } } // 신호 하강
+// 인터럽트 서비스 루틴
 
 /* ── 5. 초기화 ─────────────────────────────── */
 void setup(){
   Serial.begin(9600);
 
-  pinMode(CH_SWITCH, INPUT_PULLUP);
+  pinMode(CH_SWITCH, INPUT_PULLUP); 
   pinMode(CH_BRIGHT, INPUT_PULLUP);
   pinMode(CH_COLOR , INPUT_PULLUP);
 
-  attachPCINT(digitalPinToPCINT(CH_SWITCH), isrSwitch, CHANGE);
-  attachPCINT(digitalPinToPCINT(CH_BRIGHT), isrBright, CHANGE);
-  attachPCINT(digitalPinToPCINT(CH_COLOR ), isrColor , CHANGE);
+  attachPCINT(digitalPinToPCINT(CH_SWITCH), isrSwitch, CHANGE); // 인터럽트 핀 설정
+  attachPCINT(digitalPinToPCINT(CH_BRIGHT), isrBright, CHANGE); // 인터럽트 핀 설정
+  attachPCINT(digitalPinToPCINT(CH_COLOR ), isrColor , CHANGE); // 인터럽트 핀 설정
 
   pinMode(LED_A, OUTPUT);
   pinMode(LED_B, OUTPUT);
@@ -59,29 +60,29 @@ void loop(){
   /* 6-1. LED-A : ON/OFF (CH5 → A2) */
   if (fSwitch){
     ledA_on = (pwSwitch > 1500);       // 스위치 위쪽이면 켜짐
-    digitalWrite(LED_A, ledA_on ? HIGH : LOW);
-    fSwitch = false;
+    digitalWrite(LED_A, ledA_on ? HIGH : LOW); // LED-A ON/OFF
+    fSwitch = false;  // 펄스폭 측정 완료 초기화
   }
 
   /* 6-2. LED-B : 밝기 (CH2 → A1) */
   if (fBright){
-    int duty = map(pwBright, 1000, 2000, 0, 255);
-    analogWrite(LED_B, constrain(duty, 0, 255));
-    fBright = false;
+    int duty = map(pwBright, 1000, 2000, 0, 255); // 펄스폭 1000~2000us → 0~255 매핑
+    analogWrite(LED_B, constrain(duty, 0, 255)); // PWM 밝기
+    fBright = false;  // 펄스폭 측정 완료 초기화
   }
 
   /* 6-3 RGB-LED-C ── 색상 전용 (CH1 → A0) */
     if (fColor) {
       long hue = map(pwColor, 1000, 2000, 0, 765);      // 0~765(=3*255) 삼각 무지개
-      int r=0, g=0, b=0;
+      int r=0, g=0, b=0; // RGB 색상 초기화
   
       if (hue < 255) {            // 빨→노
-        r = 255;
-        g = hue;
+        r = 255;               
+        g = hue;               
       } else if (hue < 510) {     // 노→초
-        long h = hue - 255;
-        r = 255 - h;
-        g = 255;
+        long h = hue - 255;      
+        r = 255 - h;            
+        g = 255;                
       } else {                    // 초→청→파
         long h = hue - 510;
         g = 255 - h;
