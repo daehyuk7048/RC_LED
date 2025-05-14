@@ -1,89 +1,110 @@
 #include <PinChangeInterrupt.h>
 
-// 채널 핀 정의
-#define CH1 A0  // 밝기
-#define CH2 A1  // 색상
-#define CH5 A2  // on/off
+/* ── 0. 함수 프로토타입 ───────────────── */
+void rgbOut(int r, int g, int b);
 
-// LED 핀
-const int LED_R = 9;
-const int LED_O = 10;
-const int LED_G = 11;
+/* ── 1. RC 채널 ↔ 핀 매핑 ───────────────────── */
+/*   CH5 → A2 : LED-A ON/OFF      */
+/*   CH2 → A1 : LED-B 밝기        */
+/*   CH1 → A0 : RGB LED-C 색상    */
+#define CH_SWITCH  A2      // ★ LED-A ON/OFF  (CH5)
+#define CH_BRIGHT  A1      // ★ LED-B 밝기    (CH2)
+#define CH_COLOR   A0      // ★ LED-C 색상    (CH1)
 
-// PWM 입력 저장용
-volatile unsigned long startCH1, startCH2, startCH5;
-volatile int pwmCH1 = 1500, pwmCH2 = 1500, pwmCH5 = 1500;
-volatile bool newCH1 = false, newCH2 = false, newCH5 = false; 
+/* ── 2. LED 출력 핀 ─────────────────────────── */
+const int LED_A   = 4;     // 단색 LED-A (온/오프)
+const int LED_B   = 3;     // 단색 LED-B (PWM 밝기)
+const int LED_R   = 9;     // RGB-LED-C : R
+const int LED_G   = 10;    //              G
+const int LED_BLU = 11;    //              B
 
-void isrCH1() {//신대혁 작성
-  if (digitalRead(CH1)) startCH1 = micros(); //high 감지 , 펄스 시작 
-  else {
-    pwmCH1 = micros() - startCH1; // 펄스 길이 계산
-    newCH1 = true;
-  }
-}
+/* ── 3. 펄스 측정 전역변수 ──────────────────── */
+volatile unsigned long stSwitch, stBright, stColor;
+volatile int  pwSwitch = 1500, pwBright = 1500, pwColor = 1500;
+volatile bool fSwitch  = false, fBright = false, fColor = false;
 
-void isrCH2() {//신대혁 작성
-  if (digitalRead(CH2)) startCH2 = micros(); //high 감지 , 펄스 시작
-  else {
-    pwmCH2 = micros() - startCH2; // 펄스 길이 계산
-    newCH2 = true;
-  }
-}
+/* ── 4. ISR 세 개 ──────────────────────────── */
+void isrSwitch(){ if (digitalRead(CH_SWITCH)) stSwitch = micros();
+                  else { pwSwitch = micros() - stSwitch; fSwitch = true; } }
 
-void isrCH5() {//신대혁 작성
-  if (digitalRead(CH5)) startCH5 = micros(); //high 감지 , 펄스 시작
-  else {
-    pwmCH5 = micros() - startCH5; // 펄스 길이 계산
-    newCH5 = true;
-  }
-}
+void isrBright(){ if (digitalRead(CH_BRIGHT)) stBright = micros();
+                  else { pwBright = micros() - stBright; fBright = true; } }
 
-void setup() {//신대혁, 김태현 작성
+void isrColor (){ if (digitalRead(CH_COLOR )) stColor  = micros();
+                  else { pwColor  = micros() - stColor ; fColor  = true; } }
+
+/* ── 5. 초기화 ─────────────────────────────── */
+void setup(){
   Serial.begin(9600);
 
-  pinMode(CH1, INPUT_PULLUP);
-  pinMode(CH2, INPUT_PULLUP);
-  pinMode(CH5, INPUT_PULLUP);
+  pinMode(CH_SWITCH, INPUT_PULLUP);
+  pinMode(CH_BRIGHT, INPUT_PULLUP);
+  pinMode(CH_COLOR , INPUT_PULLUP);
 
-  attachPCINT(digitalPinToPCINT(CH1), isrCH1, CHANGE);
-  attachPCINT(digitalPinToPCINT(CH2), isrCH2, CHANGE);
-  attachPCINT(digitalPinToPCINT(CH5), isrCH5, CHANGE);
+  attachPCINT(digitalPinToPCINT(CH_SWITCH), isrSwitch, CHANGE);
+  attachPCINT(digitalPinToPCINT(CH_BRIGHT), isrBright, CHANGE);
+  attachPCINT(digitalPinToPCINT(CH_COLOR ), isrColor , CHANGE);
 
+  pinMode(LED_A, OUTPUT);
+  pinMode(LED_B, OUTPUT);
   pinMode(LED_R, OUTPUT);
   pinMode(LED_G, OUTPUT);
-  pinMode(LED_O, OUTPUT);
+  pinMode(LED_BLU, OUTPUT);
 }
 
+/* ── 6. 메인 루프 ──────────────────────────── */
+void loop(){
+  static bool ledA_on = true;          // LED-A 상태
 
-void loop() {//김태현 작성
-  static bool ledOn = true;
-  int brightness = map(pwmCH1, 1000, 2000, 0, 255); // 밝기 조절 맵핑 0-255
-
-  if (newCH5) {
-    ledOn = (pwmCH5 > 1500);  // CH5: 스위치 위치에 따라 ON/OFF
-    newCH5 = false;
+  /* 6-1. LED-A : ON/OFF (CH5 → A2) */
+  if (fSwitch){
+    ledA_on = (pwSwitch > 1500);       // 스위치 위쪽이면 켜짐
+    digitalWrite(LED_A, ledA_on ? HIGH : LOW);
+    fSwitch = false;
   }
 
-  if (ledOn) {
-    if (pwmCH2 < 1300) {
-      analogWrite(LED_R, brightness); // PWM 1300 높으면 red light // brightness 값으로 밝기 조절
-      analogWrite(LED_G, 0);
-      analogWrite(LED_O, 0);
-    } else if (pwmCH2 < 1700) { 
-      analogWrite(LED_R, 0);
-      analogWrite(LED_G, brightness); // PWM 1700 높으면 orange light // brightness 값으로 밝기 조절
-      analogWrite(LED_O, 0);
-    } else {
-      analogWrite(LED_R, 0);
-      analogWrite(LED_G, 0);
-      analogWrite(LED_O, brightness); // PWM 1300 ~ 1700 orange light // brightness 값으로 밝기 조절
+  /* 6-2. LED-B : 밝기 (CH2 → A1) */
+  if (fBright){
+    int duty = map(pwBright, 1000, 2000, 0, 255);
+    analogWrite(LED_B, constrain(duty, 0, 255));
+    fBright = false;
+  }
+
+  /* 6-3 RGB-LED-C ── 색상 전용 (CH1 → A0) */
+    if (fColor) {
+      long hue = map(pwColor, 1000, 2000, 0, 765);      // 0~765(=3*255) 삼각 무지개
+      int r=0, g=0, b=0;
+  
+      if (hue < 255) {            // 빨→노
+        r = 255;
+        g = hue;
+      } else if (hue < 510) {     // 노→초
+        long h = hue - 255;
+        r = 255 - h;
+        g = 255;
+      } else {                    // 초→청→파
+        long h = hue - 510;
+        g = 255 - h;
+        b = h;
+      }
+      rgbOut(r, g, b);
+      fColor = false;
     }
-  } else {
-    analogWrite(LED_R, 0);
-    analogWrite(LED_G, 0);
-    analogWrite(LED_O, 0);
+
+  /* (디버그용) 시리얼 출력 ------------------- */
+  if (fSwitch || fBright || fColor){
+    Serial.print("Sw:"); Serial.print(pwSwitch);
+    Serial.print("  Br:"); Serial.print(pwBright);
+    Serial.print("  Cl:"); Serial.println(pwColor);
+    fSwitch = fBright = fColor = false;
   }
 
-  newCH1 = newCH2 = false;
+  // delay(1);   // CPU 여유
+}
+
+/* ── 7. RGB 헬퍼 함수 ─────────────────────── */
+void rgbOut(int r, int g, int b){      // 공통캐소드 기준
+  analogWrite(LED_R,   r);
+  analogWrite(LED_G,   g);
+  analogWrite(LED_BLU, b);
 }
