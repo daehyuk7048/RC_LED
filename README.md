@@ -1,1 +1,4 @@
 # RC_LED
+
+| RC 채널 매핑 <-> 핀 매핑 |
+|CH5 | A2 | LED ON/OFF |
